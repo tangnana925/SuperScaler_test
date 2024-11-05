@@ -223,7 +223,7 @@ def trial(config, num_trial, adaptive_flag, initial_time=None):
 def run_search(num_stages, queue=None):
     global current_min_time
 
-    config = initialize_search(num_stages)
+    config = initialize_search(num_stages) # 生成初始化配置
     if config is None:
         debug_info(f"No feasible solution for # stage {num_stages}", args.print_debug_info)
         return None

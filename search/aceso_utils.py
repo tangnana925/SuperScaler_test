@@ -49,7 +49,7 @@ memory_ratio = {
     "resnet": {"main_params": 0, "optimizer": 2},
     "gpt": {"main_params": 2, "optimizer": 4},
     "t5": {"main_params": 2, "optimizer": 4},
-}
+} # 比例
 
 MAX_VALUE = 2**30
 MIN_VALUE = -2**30
@@ -499,7 +499,7 @@ def parse_args():
 
     if args.start_num_stages is None or args.end_num_stages is None:
         args.start_num_stages = 1 
-        args.end_num_stages = min(args.num_gpus, 16)
+        args.end_num_stages = min(args.num_gpus, 16) #这里
     if args.max_tp is None:
         args.max_tp = args.num_gpus_per_node
 

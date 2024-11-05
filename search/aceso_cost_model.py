@@ -372,6 +372,7 @@ def get_recompute_time_v3(ops, recompute_ops, mbs, tp, algo):
 
     return fwd_comp
 
+# 获取内存权重、输入和激活值
 def get_memory_v3(ops, mbs, tp, algo):
     global input_size, output_size, weights  
     in_mbs_index = get_mbs_index(mbs[0])
@@ -383,7 +384,7 @@ def get_memory_v3(ops, mbs, tp, algo):
         mbs_index = get_mbs_index(mbs[i])
         tp_index = int(math.log(tp[i], 2))
         algo_index = algo[i]
-        if args.consider_shared_space and ops[i] == "enc-attention-dropout":             
+        if args.consider_shared_space and ops[i] == "enc-attention-dropout": # dropout有啥例外?            
             _activations += activations[ops[i]][mbs_index][tp_index][algo_index] * 1.5           
         elif args.consider_shared_space and (ops[i] in ["enc-attention-softmax", "bn1"] or "-bn3" in ops[i] or ("-downsample" in ops[i] and "0-0" not in ops[i])):          
             _activations += 0        
@@ -511,12 +512,13 @@ def predict_stage_time(ops, recompute_ops, tp_size, dp_size, base_batch_size, al
 
     return sum_time/1000 
 
+# 预测阶段内存的使用情况
 def predict_stage_memory(ops, recompute_ops, tp_size, dp_size, base_batch_size, num_stages_behind, algo_list, breakdown=False):
     mbs_list = [base_batch_size//dp_size[j] for j in range(len(ops))]    
 
-    memory_weights, inputs, activations = get_memory_v3(ops, mbs_list, tp_size, algo_list)      
+    memory_weights, inputs, activations = get_memory_v3(ops, mbs_list, tp_size, algo_list)# 激活内存和权重内存 
     memory_gradients = memory_weights
-    memory_main_params = memory_weights * args.memory_main_params
+    memory_main_params = memory_weights * args.memory_main_params 
     memory_optimizer = memory_weights * args.memory_optimizer
       
     saved_activations = get_activations_v3(ops, recompute_ops, mbs_list, tp_size, algo_list)                        
@@ -531,6 +533,7 @@ def predict_stage_memory(ops, recompute_ops, tp_size, dp_size, base_batch_size, 
     memory_peak = inputs + activations - saved_activations + peak_activations
 
     memory_weights += memory_main_params
+    # 模型参数+梯度+优化器+激活值+峰值+保留
     memory_sum = memory_weights + memory_gradients + memory_optimizer + memory_activations + memory_peak + memory_reserved
 
     if breakdown:
@@ -744,6 +747,7 @@ stage_memory_set = {}
 stage_memory_visit = 0
 stage_memory_hit = 0
 
+# config、stage_index：None
 def predict_stage_memory_helper(config, stage_index, ops=None, recompute_ops=None, tp_size=None, dp_size=None, base_batch_size=None, num_stages_behind=None, algo_list=None):
     global stage_memory_visit, stage_memory_hit, stage_memory_set
     if ops is None:
@@ -819,20 +823,24 @@ def get_next_recompute_op_group(ops, recompute_ops, base_batch_size, tp_size, dp
                 index += 1
             return list(op_groups[max_saved_op_name]["index"][:index]), list(op_groups[max_saved_op_name]["activation_size"][:index])
 
+# 确定哪些op应该被重新计算，以便在内存限制内执行所有的操作。
+# 通过比较预测的内存使用量和内存限制来确定哪些op应该被重新计算。
+#    
 def check_recompute(ops, base_batch_size, tp_size, dp_size, num_stages_behind, algo_list):
     num_ops = len(ops)
     if not args.flex_recompute:
-        recompute_ops = [1 for _ in range(num_ops)]
+        recompute_ops = [1 for _ in range(num_ops)] # 所有的op都要被标记重新计算
         return recompute_ops
-    recompute_ops = [0 for _ in range(num_ops)]
+    recompute_ops = [0 for _ in range(num_ops)] # 所有的op都不需要被重新计算
+    # 预测阶段内存使用量
     stage_memory = predict_stage_memory_helper(None, None, ops, recompute_ops, tp_size, dp_size, base_batch_size, num_stages_behind, algo_list)
     stage_memory += args.peak_mem_in_backward
 
-    if stage_memory - args.memory_limit <= 0:
+    if stage_memory - args.memory_limit <= 0: # 不需要进行重计算
         return recompute_ops
 
     ## generate op groups
-    op_groups = {}
+    op_groups = {} # 映射op的每个相关信息
     for index in range(len(ops)):
         if ops[index] not in op_groups:
             op_groups[ops[index]] = {"index": [], "activation_size":[], "recomputed": False, "sum_size": 0}
@@ -861,6 +869,7 @@ def check_recompute(ops, base_batch_size, tp_size, dp_size, num_stages_behind, a
         else:
             break 
 
+        # 操作干啥
         new_saved_activations = get_activations_v3(ops, recompute_ops, mbs_list, tp_size, algo_list)     
         stage_memory -= (new_saved_activations - initial_saved_activations) * (num_stages_behind + 1)
         initial_saved_activations = new_saved_activations
@@ -926,7 +935,7 @@ def wrap_predict_delta_time(config, longest_stage, shortest_stage, num_ops_moved
 if __name__ == "__main__":
     
     config, config_dict = read_config_from_json(args, return_config_dict=True)
-    read_profiled_time(config_dict["model_name"], config_dict["model_size"], args.profiled_time_path)
+    read_profiled_time(config_dict["model_name"], config_dict["model_size"], args.profiled_time_path) # 这里导入了activation、weight、communication等信息
     predict_time_breakdown(config, print_time=True, print_memory=True)
     if args.save_to_csv is not None:
         save_config_info_to_csv(config, get_reserved_memory_list(config), args.save_to_csv)

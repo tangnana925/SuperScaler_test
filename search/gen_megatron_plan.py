@@ -92,7 +92,7 @@ for num_stages in range(args.start_num_stages, args.end_num_stages+1):
                     continue        
                 for recomp in [True, False]:
                     print(f"working on num_stages[{num_stages}], tp_size[{tp_size}], dp_size[{dp_size}], mbs[{base_mbs}], recomp[{recomp}] ...")
-                    current_configs = get_balance_config(num_stages, tp_size, dp_size, base_mbs, recomp)
+                    current_configs = get_balance_config(num_stages, tp_size, dp_size, base_mbs, recomp) # 
                     if current_configs is not None:
                         all_available_configs += current_configs
                     else:
